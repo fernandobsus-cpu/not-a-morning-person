@@ -1,0 +1,40 @@
+name: Aviso de récord
+
+# Lo dispara la Netlify Function (netlify/functions/record.mjs) cuando alguien rompe el récord global.
+on:
+  repository_dispatch:
+    types: [nuevo-record]
+
+permissions:
+  issues: write
+
+jobs:
+  avisar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Abrir issue asignado al dueño del repo
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const p = context.payload.client_payload || {};
+            const fmt = s => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+            const ant = p.anterior
+              ? `${fmt(p.anterior.segundos)} de sobra (${p.anterior.nombre}, ${p.anterior.fecha})`
+              : 'No había récord: es el primero en esta dificultad.';
+            const title = `🏆 Nuevo récord en ${p.dificultadNombre}: ${fmt(p.segundos)} de sobra — ${p.nombre}`;
+            const body = [
+              `**Jugador:** ${p.nombre}`,
+              `**Dificultad:** ${p.dificultadNombre}`,
+              `**Tiempo de sobra:** ${fmt(p.segundos)}`,
+              `**Fecha:** ${p.fecha}`,
+              `**Récord anterior:** ${ant}`,
+              '',
+              `@${context.repo.owner}`,
+            ].join('\n');
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title,
+              body,
+              assignees: [context.repo.owner],
+            });
