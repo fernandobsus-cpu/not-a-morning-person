@@ -1,0 +1,5 @@
+.DS_Store
+node_modules/
+.netlify/
+# capturas de comparación (8.8 MB), no hacen falta en el repo
+comparacion-v11-v12/

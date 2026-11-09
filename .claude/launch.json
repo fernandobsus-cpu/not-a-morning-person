@@ -1,0 +1,7 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    { "name": "juego", "runtimeExecutable": "/bin/sh", "runtimeArgs": ["-c", "cd /private/tmp/claude-501/-Users-fernando--claude-spares-spare-b68LY3/c3af98d3-9def-4af1-87f3-6aa965f62035/scratchpad/site && exec python3 -m http.server 8765"], "port": 8765 },
+    { "name": "juego-records", "runtimeExecutable": "/usr/bin/python3", "runtimeArgs": ["-I", "/private/tmp/claude-501/-Users-fernando--claude-spares-spare-b68LY3/c3af98d3-9def-4af1-87f3-6aa965f62035/scratchpad/srv/mock.py", "/private/tmp/claude-501/-Users-fernando--claude-spares-spare-b68LY3/c3af98d3-9def-4af1-87f3-6aa965f62035/scratchpad/site"], "port": 8766 }
+  ]
+}

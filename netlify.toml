@@ -1,0 +1,5 @@
+[build]
+  # deploy/index.html se genera con herramientas/build_deploy.sh y se sube ya hecho.
+  publish = "deploy"
+  functions = "netlify/functions"
+  command = "echo 'sin build: deploy/ ya viene listo'"
