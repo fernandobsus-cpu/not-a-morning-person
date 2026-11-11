@@ -3,3 +3,4 @@ node_modules/
 .netlify/
 # capturas de comparación (8.8 MB), no hacen falta en el repo
 comparacion-v11-v12/
+entregas/*.local.md

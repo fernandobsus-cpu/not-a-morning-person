@@ -647,6 +647,19 @@ input[type=text]{font-family:var(--f-body);font-size:27px;padding:8px 12px;backg
 .ending .scene svg{width:150px;height:150px}
 .hist-avg b{font-size:28px}
 @media (max-width:480px){.hist table{font-size:18px}.hist td,.hist th{padding:3px 4px}.hist td:first-child{white-space:normal}}
+
+/* Cuenta (Supabase Auth) */
+.auth{display:flex;flex-direction:column;gap:10px;align-items:center;width:min(360px,100%);padding:14px;border:2px solid var(--parch-3);border-radius:6px;background:rgba(255,255,255,.18)}
+.auth-tabs{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
+.auth-tabs .btn{font-size:16px;padding:8px 12px}
+.auth-form{display:flex;flex-direction:column;gap:6px;align-items:center;width:100%}
+.auth input[type=email],.auth input[type=password]{font-family:var(--f-body);font-size:20px;text-align:center;padding:8px 12px;width:min(320px,100%);
+  background:rgba(255,255,255,.35);color:var(--ink);border:none;border-bottom:2px solid var(--ink-2);border-radius:4px 4px 0 0}
+.auth input:focus{outline:2px solid var(--gold);outline-offset:2px}
+.auth-hi{margin:0;font-family:var(--f-title);font-size:30px;line-height:1.1;color:var(--ink)}
+.auth-msg{margin:0;min-height:1.3em;font-size:16px;color:var(--ink-2)}
+.auth-msg.err{color:var(--blood);font-weight:700}
+.auth-note{margin:0;font-size:14px;color:var(--ink-2)}
 </style>
 
 <div id="app">
@@ -686,6 +699,7 @@ input[type=text]{font-family:var(--f-body);font-size:27px;padding:8px 12px;backg
   </div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script>
 (()=>{
 {const ua=navigator.userAgent||'';
@@ -1020,7 +1034,95 @@ const SND=(()=>{
 /* ================= STATE ================= */
 let S=null;
 const screen=$('#screen'), hud=$('#hud');
-const playerName=()=>store.get('nmp-name','')||'Caballero';
+const playerName=()=>AUTH.nombre||store.get('nmp-name','')||'Caballero';
+
+/* ================= CUENTA (Supabase Auth, opcional) ================= */
+// Solo la llave pública (publishable): lo que cada usuario puede leer o escribir lo decide RLS en la tabla perfiles.
+const SB_URL='https://slcmifladmypakzvmpgd.supabase.co';
+const SB_KEY='sb_publishable_6iYJgnPfbLUBMDIoJ4rHaQ_N0TV8D7j';
+const sb=(window.supabase&&window.supabase.createClient)?window.supabase.createClient(SB_URL,SB_KEY):null;
+const AUTH={user:null,nombre:'',tab:'login',msg:'',ready:!sb};
+
+function authErr(e){
+  const c=((e&&e.code)||'')+' '+((e&&e.message)||'');
+  if(/user_already_exists|already registered|already exists/i.test(c))return 'Ese correo ya tiene cuenta. Inicia sesión.';
+  if(/weak_password|at least 6/i.test(c))return 'La contraseña debe tener al menos 6 caracteres.';
+  if(/invalid_credentials|invalid login/i.test(c))return 'Correo o contraseña incorrectos.';
+  if(/email_address_invalid|validate email|invalid format/i.test(c))return 'Ese correo no es válido.';
+  if(/rate limit|too many/i.test(c))return 'Demasiados intentos. Espera un momento.';
+  return 'No se pudo: '+((e&&e.message)||'error desconocido');
+}
+async function loadNombre(user){
+  try{const {data}=await sb.from('perfiles').select('nombre').eq('id',user.id).maybeSingle();if(data&&data.nombre)return data.nombre}catch(e){}
+  return (user.user_metadata&&user.user_metadata.nombre)||user.email;
+}
+async function setUser(user){
+  AUTH.user=user||null; AUTH.nombre=user?await loadNombre(user):''; AUTH.ready=true;
+  renderAuth();
+}
+if(sb){
+  sb.auth.getSession().then(({data})=>setUser(data.session&&data.session.user)).catch(()=>setUser(null));
+  sb.auth.onAuthStateChange((ev,session)=>{
+    if(ev==='INITIAL_SESSION')return;
+    const u=session&&session.user;
+    if((u&&u.id)===(AUTH.user&&AUTH.user.id))return; // misma sesión (p. ej. se renovó el token)
+    setTimeout(()=>setUser(u),0);
+  });
+}
+
+function authHTML(){
+  if(!sb)return `<p class="auth-msg">Las cuentas no están disponibles aquí.</p>`;
+  if(!AUTH.ready)return `<p class="auth-msg">Revisando tu sesión…</p>`;
+  const msg=`<p class="auth-msg${AUTH.msg?' err':''}" id="auMsg" role="status" aria-live="polite">${esc(AUTH.msg)}</p>`;
+  if(AUTH.user)return `<p class="auth-hi">Hola, ${esc(AUTH.nombre)}</p>${msg}<button class="btn ghost" id="outBtn">Cerrar sesión</button>`;
+  const reg=AUTH.tab==='reg';
+  return `<div class="auth-tabs" role="tablist" aria-label="Cuenta">
+      <button class="btn ${reg?'ghost':''}" data-tab="login" role="tab" aria-selected="${!reg}">Iniciar sesión</button>
+      <button class="btn ${reg?'':'ghost'}" data-tab="reg" role="tab" aria-selected="${reg}">Crear cuenta</button>
+    </div>
+    <form id="authForm" class="auth-form" novalidate>
+      ${reg?`<label class="field-label" for="auNom">Nombre</label><input type="text" id="auNom" maxlength="18" autocomplete="nickname">`:''}
+      <label class="field-label" for="auMail">Correo</label><input type="email" id="auMail" autocomplete="email">
+      <label class="field-label" for="auPass">Contraseña</label><input type="password" id="auPass" autocomplete="${reg?'new-password':'current-password'}">
+      ${msg}
+      <button class="btn" type="submit">${reg?'Crear cuenta':'Entrar'}</button>
+    </form>
+    <p class="auth-note">Opcional: puedes jugar sin cuenta.</p>`;
+}
+function renderAuth(){
+  const box=$('#authBox'); if(!box)return; // solo existe en la portada
+  box.innerHTML=authHTML();
+  const nw=$('#nameWrap'); if(nw)nw.hidden=!!AUTH.user;
+  box.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>{AUTH.tab=b.dataset.tab;AUTH.msg='';renderAuth()});
+  const out=$('#outBtn');
+  if(out)out.onclick=async()=>{out.disabled=true;AUTH.msg='';try{await sb.auth.signOut()}catch(e){}await setUser(null)};
+  const f=$('#authForm'); if(!f)return;
+  f.onsubmit=async e=>{
+    e.preventDefault();
+    const btn=f.querySelector('[type=submit]'), m=$('#auMsg');
+    const say=(t,err=true)=>{m.textContent=t;m.classList.toggle('err',err)};
+    const reg=AUTH.tab==='reg', mail=$('#auMail').value.trim(), pass=$('#auPass').value, nom=reg?$('#auNom').value.trim():'';
+    if(reg&&!nom)return say('Escribe tu nombre.');
+    if(!mail)return say('Escribe tu correo.');
+    if(!pass)return say('Escribe tu contraseña.');
+    if(reg&&pass.length<6)return say('La contraseña debe tener al menos 6 caracteres.');
+    btn.disabled=true; say(reg?'Creando tu cuenta…':'Entrando…',false);
+    try{
+      if(reg){
+        const {data,error}=await sb.auth.signUp({email:mail,password:pass,options:{data:{nombre:nom}}});
+        if(error)throw error;
+        if(!data.session)throw {message:'Supabase no abrió la sesión (¿pide confirmar el correo?).'};
+        const {error:e2}=await sb.from('perfiles').insert({id:data.user.id,nombre:nom});
+        AUTH.msg=e2?'Entraste, pero no se guardó tu perfil: '+e2.message:'';
+        await setUser(data.user);
+      }else{
+        const {data,error}=await sb.auth.signInWithPassword({email:mail,password:pass});
+        if(error)throw error;
+        AUTH.msg=''; await setUser(data.user);
+      }
+    }catch(err){say(authErr(err));btn.disabled=false}
+  };
+}
 
 function later(sec,fn){S.timers.push({t:sec,fn})}
 
@@ -1359,9 +1461,12 @@ function showTitle(){
     <div class="hero" aria-hidden="true"><div class="hero-in">${BG.bedroom()}<div class="hero-bed">${SPR.bed()}</div><div class="hero-alarm">${ico('alarm')}</div></div></div>
     <h1 class="title">Not a Morning Person</h1>
     <p class="lede">Suena la alarma en el piso 21. Tienes 3 minutos para pasar de la cama al coche en el E2, y tu familia no te la va a poner fácil.</p>
+    <div id="authBox" class="auth" aria-label="Tu cuenta"></div>
     <div class="start">
+      <div id="nameWrap" class="start"${AUTH.user?' hidden':''}>
       <label class="field-label" for="nameIn">Tu nombre</label>
       <input type="text" id="nameIn" maxlength="18" placeholder="Caballero" value="${esc(store.get('nmp-name',''))}" autocomplete="off">
+      </div>
       <div class="diff" role="radiogroup" aria-label="Dificultad">
         ${Object.entries(DIFF).map(([k,d])=>`<button class="btn ${k===chosenDiff?'':'ghost'}" role="radio" aria-checked="${k===chosenDiff}" data-d="${k}">${d.name}</button>`).join('')}
       </div>
@@ -1377,8 +1482,9 @@ function showTitle(){
     <p class="record">${best!=null?`Tu mejor marca: llegaste al coche con ${fmt(best)} de sobra.`:'Sube el volumen: la música se acelera con cada misión.'}</p>
   </section>`;
   document.querySelectorAll('.diff [data-d]').forEach(b=>b.onclick=()=>{chosenDiff=b.dataset.d;store.set('nmp-diff',chosenDiff);showTitle()});
-  $('#goBtn').onclick=()=>{store.set('nmp-name',$('#nameIn').value.trim());SND.init();showHowTo()};
+  $('#goBtn').onclick=()=>{if(!AUTH.user)store.set('nmp-name',$('#nameIn').value.trim());SND.init();showHowTo()};
   $('#nameIn').addEventListener('keydown',e=>{if(e.key==='Enter')$('#goBtn').click()});
+  renderAuth();
 }
 
 function showHowTo(){
