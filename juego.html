@@ -659,6 +659,11 @@ input[type=text]{font-family:var(--f-body);font-size:27px;padding:8px 12px;backg
 .auth-hi{margin:0;font-family:var(--f-title);font-size:30px;line-height:1.1;color:var(--ink)}
 .auth-msg{margin:0;min-height:1.3em;font-size:16px;color:var(--ink-2)}
 .auth-msg.err{color:var(--blood);font-weight:700}
+.cloud{display:flex;flex-direction:column;gap:4px;align-items:center;width:min(420px,100%);padding:12px 14px;border:2px solid var(--parch-3);border-radius:6px;background:rgba(255,255,255,.18)}
+.cloud-head{margin:0;font-family:var(--f-sc);font-size:19px;line-height:1.2;color:var(--ink-2)}
+.cloud-line{margin:0;font-size:19px;line-height:1.25}
+.cloud-line b{color:var(--blood)}
+.cloud-msg.err{color:var(--blood)}
 .auth-note{margin:0;font-size:14px;color:var(--ink-2)}
 </style>
 
@@ -1093,6 +1098,8 @@ function renderAuth(){
   const box=$('#authBox'); if(!box)return; // solo existe en la portada
   box.innerHTML=authHTML();
   const nw=$('#nameWrap'); if(nw)nw.hidden=!!AUTH.user;
+  const lr=$('#localRec'); if(lr)lr.hidden=!!AUTH.user;
+  loadCloud(); renderCloud();
   box.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>{AUTH.tab=b.dataset.tab;AUTH.msg='';renderAuth()});
   const out=$('#outBtn');
   if(out)out.onclick=async()=>{out.disabled=true;AUTH.msg='';try{await sb.auth.signOut()}catch(e){}await setUser(null)};
@@ -1479,12 +1486,13 @@ function showTitle(){
         <div><span>${SPR.dog('',true)}</span>Shrum</div><div><span>${SPR.salo('')}</span>Ishmun</div><div><span>${SPR.mario('')}</span>Shmane</div><div><span>${SPR.mama('')}</span>Baba</div>
       </div>
     </div>
-    <p class="record">${best!=null?`Tu mejor marca: llegaste al coche con ${fmt(best)} de sobra.`:'Sube el volumen: la música se acelera con cada misión.'}</p>
+    <div id="cloudBox" class="cloud" aria-live="polite" hidden></div>
+    <p class="record" id="localRec"${AUTH.user?' hidden':''}>${best!=null?`Tu mejor marca: llegaste al coche con ${fmt(best)} de sobra.`:'Sube el volumen: la música se acelera con cada misión.'}</p>
   </section>`;
   document.querySelectorAll('.diff [data-d]').forEach(b=>b.onclick=()=>{chosenDiff=b.dataset.d;store.set('nmp-diff',chosenDiff);showTitle()});
   $('#goBtn').onclick=()=>{if(!AUTH.user)store.set('nmp-name',$('#nameIn').value.trim());SND.init();showHowTo()};
   $('#nameIn').addEventListener('keydown',e=>{if(e.key==='Enter')$('#goBtn').click()});
-  renderAuth();
+  renderAuth(); // también pinta la caja de partidas en la nube
 }
 
 function showHowTo(){
@@ -1530,7 +1538,7 @@ function showHowTo(){
 function startGame(){
   SND.init();
   S={time:TOTAL,lives:START_LIVES,snoozes:MAX_SNOOZE,taskIdx:-1,task:null,event:null,running:true,paused:false,
-     diff:chosenDiff,nextEvent:rand(DIFF[chosenDiff].first[0],DIFF[chosenDiff].first[1]),queue:shuffle(Object.keys(EVENTS)),lastEv:null,timers:[],stats:{events:0,won:0},hud:{}};
+     diff:chosenDiff,nextEvent:rand(DIFF[chosenDiff].first[0],DIFF[chosenDiff].first[1]),queue:shuffle(Object.keys(EVENTS)),lastEv:null,timers:[],stats:{events:0,won:0,lostBy:[],missions:0},hud:{}};
   hud.hidden=false;
   screen.innerHTML=`<section class="parchment stage" id="stage">
     <div class="track" id="track">${TASKS.map(t=>`<span title="${t.title}">${ico(t.icon)}${ico('check','pi ck')}</span>`).join('')}</div>
@@ -1569,7 +1577,7 @@ function mountTask(T){
   let finished=false, ctl={};
   const run=S;
   const api={
-    done(){if(finished||S!==run||!S.running)return;finished=true;S.task=null;SND.good();celebrate('¡Hecho!');
+    done(){if(finished||S!==run||!S.running)return;finished=true;S.task=null;S.stats.missions++;SND.good();celebrate('¡Hecho!');
       later(.8,()=>S.taskIdx>=TASKS.length-1?win():nextTask())},
     lock(){if(S.task===ctl)S.task=null},
     float, penalty(sec){S.time-=sec;float(`−${sec} s`,'bad')},
@@ -1649,7 +1657,7 @@ function endEvent(ok,msg,D){
   else loseLife(msg,D);
 }
 function loseLife(msg,D){
-  S.lives--; S.stats.lost=(S.stats.lost||0)+1; SND.hurt(); toast(`${msg} −1 vida`,'bad');
+  S.lives--; S.stats.lost=(S.stats.lost||0)+1; S.stats.lostBy.push(CULPABLE[D&&D.key]||'torpeza'); SND.hurt(); toast(`${msg} −1 vida`,'bad');
   const l=$('#lives'); l.classList.remove('bump'); void l.offsetWidth; l.classList.add('bump');
   fx('bad'); quake();
   renderHUD(true);
@@ -1693,15 +1701,105 @@ function renderHUD(force){
 /* ================= ENDINGS ================= */
 /* ================= HISTORIAL DE PARTIDAS ================= */
 const HIST_KEY='nmp-historial', HIST_MAX=20;
-function saveRun(won){
+// Registro completo de la partida con el schema JSON acordado (Assignment 2).
+function buildRun(won,kind){
+  const lost=S.stats.lost||0;
+  return {fecha:new Date().toISOString(), dificultad:S.diff, gano:won,
+    causa:won?null:(kind==='time'?'tiempo':'vidas'),
+    misionesCompletadas:won?TASKS.length:Math.min(TASKS.length,S.stats.missions),
+    vidasPerdidas:lost, vidasRestantes:Math.max(0,S.lives),
+    segundosRestantes:Math.max(0,Math.min(TOTAL,Math.ceil(S.time))),
+    usoSnooze:S.snoozes<MAX_SNOOZE, emboscadas:S.stats.events, emboscadasGanadas:S.stats.won,
+    vidaPerdidaPor:S.stats.lostBy.slice(0,lost)};
+}
+function saveRun(won,kind){
+  if(S.saved) return; S.saved=true; // una sola fila por partida
+  const run=buildRun(won,kind);
   const hist=store.get(HIST_KEY,[]);
   const list=Array.isArray(hist)?hist:[];
-  list.push({fecha:new Date().toISOString(),dificultad:S.diff,gano:won,vidasPerdidas:S.stats.lost||0,
-    segundos:Math.max(0,Math.ceil(S.time)),snooze:S.snoozes<MAX_SNOOZE});
+  list.push({fecha:run.fecha,dificultad:run.dificultad,gano:won,vidasPerdidas:run.vidasPerdidas,
+    segundos:run.segundosRestantes,snooze:run.usoSnooze});
   // Mientras haya más de 20 partidas, borra la más antigua
   while(list.length>HIST_MAX) list.shift();
   store.set(HIST_KEY,list);
+  saveCloud(run);
 }
+
+/* ================= PARTIDAS EN LA NUBE (Supabase, tabla partidas) ================= */
+// Solo con sesión. RLS deja a cada usuario insertar y leer únicamente sus filas; user_id lo pone auth.uid().
+const CULPABLE={trump:'shrum',salo:'ishmun',mario:'shmane',mama:'baba'};
+const CULPABLE_NOMBRE={shrum:'Shrum',ishmun:'Ishmun',shmane:'Shmane',baba:'Baba',torpeza:'tu propia torpeza'};
+const CLOUD={uid:null,rows:null,loading:false,err:false,save:null};
+const toRow=r=>({fecha:r.fecha,dificultad:r.dificultad,gano:r.gano,causa:r.causa,
+  misiones_completadas:r.misionesCompletadas,vidas_perdidas:r.vidasPerdidas,vidas_restantes:r.vidasRestantes,
+  segundos_restantes:r.segundosRestantes,uso_snooze:r.usoSnooze,emboscadas:r.emboscadas,
+  emboscadas_ganadas:r.emboscadasGanadas,vida_perdida_por:r.vidaPerdidaPor});
+function saveCloud(run){
+  CLOUD.save=null;
+  if(!sb||!AUTH.user) return;
+  const uid=AUTH.user.id;
+  CLOUD.save='saving'; paintCloudMsg();
+  sb.from('partidas').insert(toRow(run)).then(({error})=>{
+    CLOUD.save=error?'err':'ok';
+    if(error) console.warn('partidas: no se guardó',error.message);
+    else if(CLOUD.uid===uid&&Array.isArray(CLOUD.rows)) CLOUD.rows.unshift(toRow(run)); // la portada ya la incluye
+    paintCloudMsg();
+  },()=>{CLOUD.save='err';paintCloudMsg()});
+}
+function paintCloudMsg(){
+  const el=$('#cloudMsg'); if(!el) return;
+  const t={saving:'Guardando en tu cuenta…',ok:'Partida guardada en tu cuenta.',err:'No se pudo guardar en tu cuenta (revisa tu conexión).'}[CLOUD.save];
+  el.hidden=!t; el.textContent=t||''; el.classList.toggle('err',CLOUD.save==='err');
+}
+function loadCloud(){
+  if(!sb||!AUTH.user){CLOUD.uid=null;CLOUD.rows=null;return}
+  const uid=AUTH.user.id;
+  if(CLOUD.uid===uid&&(CLOUD.rows||CLOUD.loading)) return;
+  CLOUD.uid=uid; CLOUD.rows=null; CLOUD.loading=true; CLOUD.err=false;
+  sb.from('partidas').select('fecha,dificultad,gano,causa,misiones_completadas,vidas_perdidas,segundos_restantes,vida_perdida_por')
+    .order('fecha',{ascending:false}).limit(500)
+    .then(({data,error})=>{
+      if(CLOUD.uid!==uid) return; // cambió la sesión mientras cargaba
+      CLOUD.loading=false;
+      if(error){CLOUD.err=true;console.warn('partidas: no se pudo leer',error.message)}
+      else CLOUD.rows=data||[];
+      renderCloud();
+    },()=>{if(CLOUD.uid===uid){CLOUD.loading=false;CLOUD.err=true;renderCloud()}});
+}
+// Cálculo puro (filas en orden de más nueva a más vieja) → estadísticas de una dificultad.
+function cloudStats(rows,diff){
+  const d=rows.filter(r=>r.dificultad===diff);
+  const wins=d.filter(r=>r.gano);
+  const best=wins.length?Math.max(...wins.map(r=>r.segundos_restantes)):null;
+  const lastWin=wins[0]||null;
+  const count={}; let nemesis=null;
+  for(const r of d) for(const k of (r.vida_perdida_por||[])){count[k]=(count[k]||0)+1; if(!nemesis||count[k]>count[nemesis]) nemesis=k}
+  return {jugadas:d.length, victorias:wins.length, best,
+    ultima:lastWin?lastWin.segundos_restantes:null,
+    falta:lastWin&&best!=null?best-lastWin.segundos_restantes:null,
+    promVidas:d.length?d.reduce((a,r)=>a+r.vidas_perdidas,0)/d.length:null,
+    nemesis, nemesisVidas:nemesis?count[nemesis]:0};
+}
+function cloudHTML(){
+  const name=DIFF[chosenDiff].name;
+  const head=`<p class="cloud-head">Tus partidas en la nube · ${name}</p>`;
+  if(CLOUD.err) return head+`<p class="cloud-line">No se pudieron cargar tus partidas.</p>`;
+  if(!CLOUD.rows) return head+`<p class="cloud-line">Cargando tus partidas…</p>`;
+  const st=cloudStats(CLOUD.rows,chosenDiff);
+  if(!st.jugadas) return head+`<p class="cloud-line">Aún no tienes partidas en modo ${name}. La primera que termines se guarda aquí.</p>`;
+  const rec=st.best==null?'Todavía no llegas al coche en este modo.'
+    :`Récord: <b>${fmt(st.best)}</b> de sobra. `+(st.falta>0?`Tu última victoria quedó a <b>${fmt(st.falta)}</b> de superarlo.`:'Tu última victoria es tu récord.');
+  const nem=st.nemesis?`Quien más vidas te quita: <b>${CULPABLE_NOMBRE[st.nemesis]||st.nemesis}</b> (${st.nemesisVidas}).`:'Nadie te ha quitado vidas.';
+  return head+`<p class="cloud-line">${rec}</p>
+    <p class="cloud-line">${st.jugadas} ${st.jugadas===1?'partida':'partidas'} · ${st.victorias} ${st.victorias===1?'victoria':'victorias'} · <b>${st.promVidas.toFixed(2)}</b> vidas perdidas en promedio</p>
+    <p class="cloud-line">${nem}</p>`;
+}
+function renderCloud(){
+  const box=$('#cloudBox'); if(!box) return;
+  box.hidden=!AUTH.user;
+  if(AUTH.user) box.innerHTML=cloudHTML();
+}
+
 function historyHTML(){
   const all=store.get(HIST_KEY,[]);
   const cur=DF().name, key=(S&&S.diff)||chosenDiff;
@@ -1728,7 +1826,7 @@ function historyHTML(){
 
 function endGame(kind,D){
   if(!S.running) return;
-  saveRun(false);
+  saveRun(false,kind);
   S.running=false; S.task=null; S.event=null;
   SND.stopMusic(); SND.sad();
   hud.hidden=true;
@@ -1747,15 +1845,17 @@ function endGame(kind,D){
       <div><b>${MAX_SNOOZE-S.snoozes}</b><span>Posposiciones</span></div>
       <div><b>${fmt(S.time)}</b><span>Tiempo</span></div>
     </div>
+    <p class="record cloud-msg" id="cloudMsg" role="status" hidden></p>
     ${historyHTML()}
     <div class="row"><button class="btn" id="again">Intentarlo otra vez</button><button class="btn ghost" id="menu">Menú</button></div>
   </section>`;
   $('#again').onclick=startGame; $('#menu').onclick=showTitle;
+  paintCloudMsg();
 }
 
 function win(){
   S.running=false; S.task=null;
-  saveRun(true);
+  saveRun(true,null);
   SND.stopMusic();
   hud.hidden=true;
   const left=Math.max(0,Math.ceil(S.time));
@@ -1788,10 +1888,12 @@ function showVictory(left){
     </div>
     <p class="record">${isBest?'¡Nueva mejor marca!':`Tu mejor marca: ${fmt(best)} de sobra`}</p>
     <p class="record" id="grec" hidden></p>
+    <p class="record cloud-msg" id="cloudMsg" role="status" hidden></p>
     ${historyHTML()}
     <div class="row"><button class="btn" id="again">Jugar otra vez</button><button class="btn ghost" id="menu">Menú</button></div>
   </section>`;
   $('#again').onclick=startGame; $('#menu').onclick=showTitle;
+  paintCloudMsg();
   reportGlobal(S.diff,left);
 }
 /* Récord global: solo funciona en Netlify (/api/record). En el artifact o local falla en silencio. */
