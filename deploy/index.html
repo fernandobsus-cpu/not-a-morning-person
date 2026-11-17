@@ -1783,13 +1783,16 @@ function cloudStats(rows,diff){
   const wins=d.filter(r=>r.gano);
   const best=wins.length?Math.max(...wins.map(r=>r.segundos_restantes)):null;
   const lastWin=wins[0]||null;
-  const count={}; let nemesis=null;
-  for(const r of d) for(const k of (r.vida_perdida_por||[])){count[k]=(count[k]||0)+1; if(!nemesis||count[k]>count[nemesis]) nemesis=k}
+  // Quién más vidas quita; si hay empate se devuelven todos los empatados (decisión del alumno, Assignment 2).
+  const count={};
+  for(const r of d) for(const k of (r.vida_perdida_por||[])) count[k]=(count[k]||0)+1;
+  const top=Math.max(0,...Object.values(count));
+  const nemeses=top?Object.keys(count).filter(k=>count[k]===top).sort():[];
   return {jugadas:d.length, victorias:wins.length, best,
     ultima:lastWin?lastWin.segundos_restantes:null,
     falta:lastWin&&best!=null?best-lastWin.segundos_restantes:null,
     promVidas:d.length?d.reduce((a,r)=>a+r.vidas_perdidas,0)/d.length:null,
-    nemesis, nemesisVidas:nemesis?count[nemesis]:0};
+    nemeses, nemesisVidas:top};
 }
 function cloudHTML(){
   const name=DIFF[chosenDiff].name;
@@ -1800,7 +1803,11 @@ function cloudHTML(){
   if(!st.jugadas) return head+`<p class="cloud-line">Aún no tienes partidas en modo ${name}. La primera que termines se guarda aquí.</p>`;
   const rec=st.best==null?'Todavía no llegas al coche en este modo.'
     :`Récord: <b>${fmt(st.best)}</b> de sobra. `+(st.falta>0?`Tu última victoria quedó a <b>${fmt(st.falta)}</b> de superarlo.`:'Tu última victoria es tu récord.');
-  const nem=st.nemesis?`Quien más vidas te quita: <b>${CULPABLE_NOMBRE[st.nemesis]||st.nemesis}</b> (${st.nemesisVidas}).`:'Nadie te ha quitado vidas.';
+  const nomb=st.nemeses.map(k=>`<b>${CULPABLE_NOMBRE[k]||k}</b>`);
+  const lista=nomb.length>1?nomb.slice(0,-1).join(', ')+' y '+nomb[nomb.length-1]:nomb[0];
+  const nem=!nomb.length?'Nadie te ha quitado vidas.'
+    :nomb.length===1?`Quien más vidas te quita: ${lista} (${st.nemesisVidas}).`
+    :`Quienes más vidas te quitan: ${lista} (${st.nemesisVidas} cada uno).`;
   return head+`<p class="cloud-line">${rec}</p>
     <p class="cloud-line">${st.jugadas} ${st.jugadas===1?'partida':'partidas'} · ${st.victorias} ${st.victorias===1?'victoria':'victorias'} · <b>${st.promVidas.toFixed(2)}</b> vidas perdidas en promedio</p>
     <p class="cloud-line">${nem}</p>`;

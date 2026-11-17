@@ -109,9 +109,15 @@ RUNNER = r"""<script>
     const st=T.cloudStats(window.__SB.rows,'normal');
     R.statsNormal=st;
     caso('cloudStats: récord 75 s, última victoria a 14 s, 3 partidas, 2 victorias, Baba x2',
-      st.best===75&&st.ultima===61&&st.falta===14&&st.jugadas===3&&st.victorias===2&&st.nemesis==='baba'&&st.nemesisVidas===2&&Math.abs(st.promVidas-1)<1e-9,JSON.stringify(st));
+      st.best===75&&st.ultima===61&&st.falta===14&&st.jugadas===3&&st.victorias===2&&JSON.stringify(st.nemeses)==='["baba"]'&&st.nemesisVidas===2&&Math.abs(st.promVidas-1)<1e-9,JSON.stringify(st));
     caso('Portada muestra récord y culpable de la nube',b&&!b.hidden&&/1:15/.test(b.textContent)&&/0:14/.test(b.textContent)&&/Baba/.test(b.textContent),R.portada&&R.portada.texto);
     caso('Récord local oculto con sesión',document.querySelector('#localRec').hidden,'');
+    // Empate (caso real de la partida en producción: ishmun 1, shrum 1)
+    const emp=T.cloudStats([{dificultad:'hard',gano:false,vidas_perdidas:2,segundos_restantes:144,vida_perdida_por:['ishmun','shrum']}],'hard');
+    caso('Empate: devuelve a todos los empatados (Ishmun y Shrum)',JSON.stringify(emp.nemeses)==='["ishmun","shrum"]'&&emp.nemesisVidas===1,JSON.stringify(emp));
+    document.querySelector('[data-d=hard]').click(); await wait(.3);
+    const tb=document.querySelector('#cloudBox').textContent.replace(/\s+/g,' ');
+    caso('Portada en Difícil (1 vida de Ishmun, sin empate) usa singular',/Quien más vidas te quita: Ishmun \(1\)/.test(tb),tb);
     R.listo=true;save();return;
   }
 
