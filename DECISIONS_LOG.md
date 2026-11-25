@@ -21,4 +21,5 @@ Con la llave pública, `records` y `registrar_record` responden 401. La fila de 
 
 | # | Fecha | Propuesta del IS | Decisión de Fernando | Estado / evidencia |
 |---|---|---|---|---|
-| 6 | 2026-11-25 | Al guardar la llave, quedó una variable extra en Vercel cuyo *nombre* es la llave secreta (visible en texto plano). El IS propone borrarla y rotar la llave en Supabase. | Pendiente. | — |
+| 6 | 2026-11-25 | Al guardar la llave, quedó una variable extra en Vercel cuyo *nombre* es la llave secreta (visible en texto plano). El IS propone borrarla y rotar la llave en Supabase. | **Borrar y rotar.** | Variable extra borrada en Vercel. Nueva llave `vercel_record` en Supabase → `SUPABASE_SECRET_KEY`. Deploy `4ff57cf`. Prueba en vivo 200 antes de borrar la vieja; llave `default` borrada; prueba en vivo 200 de nuevo (ya solo con la nueva). Filas de prueba borradas (0 filas). |
+| 7 | 2026-11-25 | El IS recordó que la regla inicial era que Fernando escribiera las entradas del README y la autoevaluación, y que la sección "Uso de IA" debía declararlo si no. Corrigió su razón de la entrada 4 ("la gente no tiene acceso"): `/api/record` es público y se ve en la pestaña Network. | Pidió que el IS las redactara con sus respuestas; se declara en "Uso de IA". La entrada 4 usa solo la razón válida (público = la clase, impacto bajo). | README.md. |
