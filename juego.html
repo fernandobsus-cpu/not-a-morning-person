@@ -1903,7 +1903,7 @@ function showVictory(left){
   paintCloudMsg();
   reportGlobal(S.diff,left);
 }
-/* Récord global: solo funciona en Netlify (/api/record). En el artifact o local falla en silencio. */
+/* Récord global: /api/record (función de Vercel, api/record.js). En el artifact o local falla en silencio. */
 function reportGlobal(diff,left){
   if(!/^https?:$/.test(location.protocol)) return;
   fetch('/api/record',{method:'POST',headers:{'content-type':'application/json'},
